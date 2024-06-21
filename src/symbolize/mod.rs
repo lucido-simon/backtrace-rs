@@ -1,12 +1,5 @@
 use core::{fmt, str};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "std")] {
-        use std::path::Path;
-        use std::prelude::v1::*;
-    }
-}
-
 use super::backtrace::Frame;
 use super::types::BytesOrWideString;
 use core::ffi::c_void;
@@ -57,7 +50,6 @@ use rustc_demangle::{try_demangle, Demangle};
 ///     });
 /// }
 /// ```
-#[cfg(feature = "std")]
 pub fn resolve<F: FnMut(&Symbol)>(addr: *mut c_void, cb: F) {
     let _guard = crate::lock::lock();
     unsafe { resolve_unsynchronized(addr, cb) }
@@ -99,7 +91,6 @@ pub fn resolve<F: FnMut(&Symbol)>(addr: *mut c_void, cb: F) {
 ///     });
 /// }
 /// ```
-#[cfg(feature = "std")]
 pub fn resolve_frame<F: FnMut(&Symbol)>(frame: &Frame, cb: F) {
     let _guard = crate::lock::lock();
     unsafe { resolve_frame_unsynchronized(frame, cb) }

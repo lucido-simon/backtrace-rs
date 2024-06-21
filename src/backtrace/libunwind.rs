@@ -185,7 +185,7 @@ mod uw {
             not(all(target_os = "vita", target_arch = "arm")),
         ))] {
             extern "C" {
-                pub fn _Unwind_GetIP(ctx: *mut _Unwind_Context) -> libc::uintptr_t;
+                pub fn _Unwind_GetIP(ctx: *mut _Unwind_Context) -> usize;
                 pub fn _Unwind_FindEnclosingFunction(pc: *mut c_void) -> *mut c_void;
 
                 #[cfg(not(all(target_os = "linux", target_arch = "s390x")))]
@@ -195,7 +195,7 @@ mod uw {
                 //
                 // https://github.com/libunwind/libunwind/blob/d32956507cf29d9b1a98a8bce53c78623908f4fe/src/unwind/GetCFA.c#L28-L35
                 #[link_name = "_Unwind_GetCFA"]
-                pub fn get_sp(ctx: *mut _Unwind_Context) -> libc::uintptr_t;
+                pub fn get_sp(ctx: *mut _Unwind_Context) -> usize;
 
             }
 

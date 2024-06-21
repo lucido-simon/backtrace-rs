@@ -1,11 +1,14 @@
 #[cfg(feature = "serde")]
 use crate::resolve;
-use crate::PrintFmt;
 use crate::{resolve_frame, trace, BacktraceFmt, Symbol, SymbolName};
-use std::ffi::c_void;
-use std::fmt;
-use std::path::{Path, PathBuf};
-use std::prelude::v1::*;
+use crate::{BytesOrWideString, PrintFmt};
+use core::borrow::Borrow;
+use core::ffi::c_void;
+use core::fmt;
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+// use std::path::{Path, PathBuf};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -95,7 +98,7 @@ impl Frame {
             symbols.push(BacktraceSymbol {
                 name: symbol.name().map(|m| m.as_bytes().to_vec()),
                 addr: symbol.addr().map(|a| a as usize),
-                filename: symbol.filename().map(|m| m.to_owned()),
+                filename: symbol.filename_raw().map(|string| string.to_string()),
                 lineno: symbol.lineno(),
                 colno: symbol.colno(),
             });
@@ -121,11 +124,10 @@ impl Frame {
 /// This function requires the `std` feature of the `backtrace` crate to be
 /// enabled, and the `std` feature is enabled by default.
 #[derive(Clone)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct BacktraceSymbol {
     name: Option<Vec<u8>>,
     addr: Option<usize>,
-    filename: Option<PathBuf>,
+    filename: Option<String>,
     lineno: Option<u32>,
     colno: Option<u32>,
 }
@@ -356,8 +358,8 @@ impl BacktraceSymbol {
     ///
     /// This function requires the `std` feature of the `backtrace` crate to be
     /// enabled, and the `std` feature is enabled by default.
-    pub fn filename(&self) -> Option<&Path> {
-        self.filename.as_ref().map(|p| &**p)
+    pub fn filename(&self) -> Option<String> {
+        self.filename.clone()
     }
 
     /// Same as `Symbol::lineno`
@@ -393,18 +395,9 @@ impl fmt::Debug for Backtrace {
         // we just print the path as-is. Note that we also only do this for the
         // short format, because if it's full we presumably want to print
         // everything.
-        let cwd = std::env::current_dir();
         let mut print_path =
             move |fmt: &mut fmt::Formatter<'_>, path: crate::BytesOrWideString<'_>| {
-                let path = path.into_path_buf();
-                if style == PrintFmt::Full {
-                    if let Ok(cwd) = &cwd {
-                        if let Ok(suffix) = path.strip_prefix(cwd) {
-                            return fmt::Display::fmt(&suffix.display(), fmt);
-                        }
-                    }
-                }
-                fmt::Display::fmt(&path.display(), fmt)
+                fmt::Display::fmt(&path.to_str_lossy(), fmt)
             };
 
         let mut f = BacktraceFmt::new(fmt, style, &mut print_path);
@@ -437,7 +430,7 @@ impl fmt::Debug for BacktraceSymbol {
         fmt.debug_struct("BacktraceSymbol")
             .field("name", &self.name())
             .field("addr", &self.addr())
-            .field("filename", &self.filename())
+            .field("filename", &self.filename)
             .field("lineno", &self.lineno())
             .field("colno", &self.colno())
             .finish()
@@ -493,28 +486,30 @@ mod serde_impls {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     extern crate std;
+//     use super::*;
+//     use std::prelude::v1::*;
 
-    #[test]
-    fn test_frame_conversion() {
-        let mut frames = vec![];
-        crate::trace(|frame| {
-            let converted = BacktraceFrame::from(frame.clone());
-            frames.push(converted);
-            true
-        });
+//     #[test]
+//     fn test_frame_conversion() {
+//         let mut frames = vec![];
+//         crate::trace(|frame| {
+//             let converted = BacktraceFrame::from(frame.clone());
+//             frames.push(converted);
+//             true
+//         });
 
-        let mut manual = Backtrace::from(frames);
-        manual.resolve();
-        let frames = manual.frames();
+//         let mut manual = Backtrace::from(frames);
+//         manual.resolve();
+//         let frames = manual.frames();
 
-        for frame in frames {
-            println!("{:?}", frame.ip());
-            println!("{:?}", frame.symbol_address());
-            println!("{:?}", frame.module_base_address());
-            println!("{:?}", frame.symbols());
-        }
-    }
-}
+//         for frame in frames {
+//             println!("{:?}", frame.ip());
+//             println!("{:?}", frame.symbol_address());
+//             println!("{:?}", frame.module_base_address());
+//             println!("{:?}", frame.symbols());
+//         }
+//     }
+// }

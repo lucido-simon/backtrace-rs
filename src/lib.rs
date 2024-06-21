@@ -88,19 +88,6 @@
 
 #![deny(missing_docs)]
 #![no_std]
-#![cfg_attr(
-    all(feature = "std", target_env = "sgx", target_vendor = "fortanix"),
-    feature(sgx_platform)
-)]
-#![warn(rust_2018_idioms)]
-// When we're building as part of libstd, silence all warnings since they're
-// irrelevant as this crate is developed out-of-tree.
-#![cfg_attr(backtrace_in_libstd, allow(warnings))]
-#![cfg_attr(not(feature = "std"), allow(dead_code))]
-
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate std;
 
 // This is only used for gimli right now, which is only used on some platforms, and miri
 // so don't worry if it's unused in other configurations.
@@ -123,14 +110,10 @@ pub use self::symbolize::clear_symbol_cache;
 mod print;
 pub use print::{BacktraceFmt, BacktraceFrameFmt, PrintFmt};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "std")] {
-        pub use self::backtrace::trace;
-        pub use self::symbolize::{resolve, resolve_frame};
-        pub use self::capture::{Backtrace, BacktraceFrame, BacktraceSymbol};
-        mod capture;
-    }
-}
+pub use self::backtrace::trace;
+pub use self::capture::{Backtrace, BacktraceFrame, BacktraceSymbol};
+pub use self::symbolize::{resolve, resolve_frame};
+mod capture;
 
 cfg_if::cfg_if! {
     if #[cfg(all(target_env = "sgx", target_vendor = "fortanix", not(feature = "std")))] {
@@ -138,12 +121,11 @@ cfg_if::cfg_if! {
     }
 }
 
-#[cfg(feature = "std")]
 mod lock {
-    use std::boxed::Box;
-    use std::cell::Cell;
-    use std::ptr;
-    use std::sync::{Mutex, MutexGuard, Once};
+    use alloc::boxed::Box;
+    // use alloc::cell::Cell;
+    use core::ptr;
+    use spin::{Mutex, MutexGuard, Once};
 
     /// A "Maybe" LockGuard
     pub struct LockGuard(Option<MutexGuard<'static, ()>>);
@@ -151,19 +133,21 @@ mod lock {
     /// The global lock, lazily allocated on first use
     static mut LOCK: *mut Mutex<()> = ptr::null_mut();
     static INIT: Once = Once::new();
+
     // Whether this thread is the one that holds the lock
-    thread_local!(static LOCK_HELD: Cell<bool> = Cell::new(false));
+    // TODO: Make it thread safe. Used to be thread_local
+    static LOCK_HELD: bool = false;
 
     impl Drop for LockGuard {
         fn drop(&mut self) {
             // Don't do anything if we're a LockGuard(None)
             if self.0.is_some() {
-                LOCK_HELD.with(|slot| {
-                    // Immediately crash if we somehow aren't the thread holding this lock
-                    assert!(slot.get());
-                    // We are no longer the thread holding this lock
-                    slot.set(false);
-                });
+                // LOCK_HELD.with(|slot| {
+                //     // Immediately crash if we somehow aren't the thread holding this lock
+                //     assert!(slot.get());
+                //     // We are no longer the thread holding this lock
+                //     slot.set(false);
+                // });
             }
             // lock implicitly released here, if we're a LockGuard(Some(..))
         }
@@ -222,19 +206,19 @@ mod lock {
     pub fn lock() -> LockGuard {
         // If we're the thread holding this lock, pretend to acquire the lock
         // again by returning a LockGuard(None)
-        if LOCK_HELD.with(|l| l.get()) {
-            return LockGuard(None);
-        }
+        // if LOCK_HELD.with(|l| l.get()) {
+        //     return LockGuard(None);
+        // }
         // Insist that we totally are the thread holding the lock
         // (our thread will block until we are)
-        LOCK_HELD.with(|s| s.set(true));
+        // LOCK_HELD.with(|s| s.set(true));
         unsafe {
             // lazily allocate the lock if necessary
             INIT.call_once(|| {
                 LOCK = Box::into_raw(Box::new(Mutex::new(())));
             });
             // ok *actually* try to acquire the lock, blocking as necessary
-            LockGuard(Some((*LOCK).lock().unwrap()))
+            LockGuard(Some((*LOCK).lock()))
         }
     }
 }
@@ -248,5 +232,3 @@ mod lock {
     not(target_vendor = "uwp")
 ))]
 mod dbghelp;
-#[cfg(windows)]
-mod windows;

@@ -1,4 +1,3 @@
-#[cfg(feature = "std")]
 use super::{BacktraceFrame, BacktraceSymbol};
 use super::{BytesOrWideString, Frame, SymbolName};
 use core::ffi::c_void;
@@ -124,7 +123,6 @@ impl BacktraceFrameFmt<'_, '_, '_> {
     ///
     /// This function requires the `std` feature of the `backtrace` crate to be
     /// enabled, and the `std` feature is enabled by default.
-    #[cfg(feature = "std")]
     pub fn backtrace_frame(&mut self, frame: &BacktraceFrame) -> fmt::Result {
         let symbols = frame.symbols();
         for symbol in symbols {
@@ -142,21 +140,20 @@ impl BacktraceFrameFmt<'_, '_, '_> {
     ///
     /// This function requires the `std` feature of the `backtrace` crate to be
     /// enabled, and the `std` feature is enabled by default.
-    #[cfg(feature = "std")]
     pub fn backtrace_symbol(
         &mut self,
         frame: &BacktraceFrame,
         symbol: &BacktraceSymbol,
     ) -> fmt::Result {
+        let filename = symbol.filename().unwrap_or_default();
+
         self.print_raw_with_column(
             frame.ip(),
             symbol.name(),
             // TODO: this isn't great that we don't end up printing anything
             // with non-utf8 filenames. Thankfully almost everything is utf8 so
             // this shouldn't be too bad.
-            symbol
-                .filename()
-                .and_then(|p| Some(BytesOrWideString::Bytes(p.to_str()?.as_bytes()))),
+            Some(BytesOrWideString::Bytes(filename.as_bytes())),
             symbol.lineno(),
             symbol.colno(),
         )?;
